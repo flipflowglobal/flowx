@@ -1,0 +1,6 @@
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install grpcio grpcio-tools prometheus-client typer pytest
+COPY . .
+EXPOSE 50051
+CMD ["python", "-m", "orchestrator.cli", "start"]

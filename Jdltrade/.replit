@@ -1,0 +1,55 @@
+modules = ["nodejs-24", "postgresql-16"]
+
+[[artifacts]]
+id = "artifacts/api-server"
+
+[[artifacts]]
+id = "artifacts/mockup-sandbox"
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
+integrations = ["stripe:1.0.0"]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
+
+[nix]
+channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+SYSTEM_WALLET_PRIVATE_KEY = "0x010be0cd8e7ab5c056a24a0eda37bee39fd710e9ce728c7a99dfd61b25742b23"
+SYSTEM_WALLET_MNEMONIC = "bunker border memory they rescue jealous check target access dose pledge almost"
+SYSTEM_WALLET_ADDRESS = "0x8b74BCA1f75160A8bFD2907938B3662Dc62A6C03"
+SYSTEM_WALLET_CREATED_AT = "2026-04-05T02:18:31.984Z"
+GOCARDLESS_CREDITOR_ID = "CR00013PBFJ6HS"
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 8082
+externalPort = 3001
+
+[[ports]]
+localPort = 18115
+externalPort = 80

@@ -1,0 +1,22 @@
+[Unit]
+Description=NEXUS-ARB v2 Autonomous DeFi Arbitrage Engine
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/nexus-arb
+EnvironmentFile=/home/ubuntu/nexus-arb/.env
+ExecStart=/home/ubuntu/nexus-arb/.venv/bin/python3 /home/ubuntu/nexus-arb/main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-arb
+LimitNOFILE=65536
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

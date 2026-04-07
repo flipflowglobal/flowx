@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  vault:
+    image: hashicorp/vault:1.15
+    cap_add:
+      - IPC_LOCK
+  nats:
+    image: nats:latest
+    command: ["-js"]
+  orchestrator:
+    build: .
+    depends_on:
+      - vault
+      - nats
+    ports:
+      - "50051:50051"
+      - "8000:8000"

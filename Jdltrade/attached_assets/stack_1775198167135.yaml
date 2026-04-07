@@ -1,0 +1,8 @@
+stack:
+  id: ultimate-orchestrator-full
+  description: Ultimate Aureon-v orchestrator full operational
+  modules:
+    - id: OC-01
+      name: orchestrator
+      repo_path: .
+      version: "2.0.0"

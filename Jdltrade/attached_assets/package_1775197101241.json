@@ -1,0 +1,20 @@
+{
+  "name": "nexus-arb",
+  "version": "2.0.0",
+  "description": "Autonomous DeFi Arbitrage Engine",
+  "private": true,
+  "scripts": {
+    "compile":         "hardhat compile",
+    "test:contracts":  "hardhat test",
+    "deploy:mainnet":  "hardhat run scripts/deploy.js --network mainnet",
+    "deploy:arbitrum": "hardhat run scripts/deploy.js --network arbitrum",
+    "deploy:local":    "hardhat run scripts/deploy.js --network hardhat",
+    "verify:mainnet":  "hardhat run scripts/verify.js --network mainnet",
+    "node:fork":       "hardhat node --fork $ETH_RPC_URL"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.22.0",
+    "dotenv": "^16.4.5"
+  }
+}

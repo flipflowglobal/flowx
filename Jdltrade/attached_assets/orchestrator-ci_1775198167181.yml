@@ -1,0 +1,23 @@
+name: orchestrator-ci
+on:
+  push:
+    branches: [alpha, main]
+    paths: ["orchestrator/**"]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: pip install grpcio grpcio-tools prometheus-client typer pytest
+      - name: Run tests
+        run: pytest tests
+      - name: Build & publish Docker
+        run: |
+          docker build -t ghcr.io/flipflow/orchestrator:${{ github.sha }} .
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ghcr.io/flipflow/orchestrator:${{ github.sha }}

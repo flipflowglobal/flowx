@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS-ARB v2 | Command Center</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="scanline"></div>
+
+<header>
+  <div class="logo">NEXUS<span>ARB</span> <em>v2.0</em></div>
+  <div class="header-stats">
+    <span id="hdr-block">BLOCK ──</span>
+    <span id="hdr-gas">GAS ── GWEI</span>
+    <span id="hdr-chain">ETH MAINNET</span>
+    <div class="status-dot" id="conn-dot" title="WebSocket"></div>
+  </div>
+</header>
+
+<main>
+  <!-- Row 1: P&L + AI Engines -->
+  <div class="grid-row">
+    <section class="panel panel-wide" id="pnl-panel">
+      <div class="panel-title">NET P&L  <span class="sub">rolling 500 cycles</span></div>
+      <canvas id="pnl-chart" width="700" height="180"></canvas>
+      <div class="pnl-stats">
+        <div class="stat-box"><div class="stat-label">TOTAL</div><div class="stat-val green" id="stat-total">$0.0000</div></div>
+        <div class="stat-box"><div class="stat-label">WIN RATE</div><div class="stat-val" id="stat-winrate">0%</div></div>
+        <div class="stat-box"><div class="stat-label">BEST</div><div class="stat-val green" id="stat-best">$0.0000</div></div>
+        <div class="stat-box"><div class="stat-label">AVG</div><div class="stat-val" id="stat-avg">$0.0000</div></div>
+        <div class="stat-box"><div class="stat-label">TRADES</div><div class="stat-val" id="stat-trades">0</div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="ai-panel">
+      <div class="panel-title">AI ENGINES  <span class="sub">shapley weights</span></div>
+      <div class="engine-row">
+        <div class="eng-label">PPO</div>
+        <div class="bar-track"><div class="bar-fill" id="bar-ppo" style="width:25%"></div></div>
+        <div class="eng-val" id="val-ppo">0.250</div>
+      </div>
+      <div class="engine-row">
+        <div class="eng-label">THOMPSON</div>
+        <div class="bar-track"><div class="bar-fill" id="bar-thompson" style="width:25%"></div></div>
+        <div class="eng-val" id="val-thompson">0.250</div>
+      </div>
+      <div class="engine-row">
+        <div class="eng-label">UKF</div>
+        <div class="bar-track"><div class="bar-fill" id="bar-ukf" style="width:25%"></div></div>
+        <div class="eng-val" id="val-ukf">0.250</div>
+      </div>
+      <div class="engine-row">
+        <div class="eng-label">CMA-ES</div>
+        <div class="bar-track"><div class="bar-fill" id="bar-cma" style="width:25%"></div></div>
+        <div class="eng-val" id="val-cma">0.250</div>
+      </div>
+      <div class="divider"></div>
+      <div class="kelly-row">
+        <span class="eng-label">KELLY f*</span>
+        <span class="stat-val" id="kelly-val">0.000</span>
+        <span class="eng-label" style="margin-left:1rem">LOAN</span>
+        <span class="stat-val green" id="kelly-loan">$0</span>
+      </div>
+      <div class="cb-row">
+        <span class="eng-label">CIRCUIT BREAKER</span>
+        <span class="cb-badge" id="cb-badge">CLOSED</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Row 2: Gas gauge + System status -->
+  <div class="grid-row">
+    <section class="panel panel-narrow" id="gas-panel">
+      <div class="panel-title">GAS ORACLE</div>
+      <canvas id="gas-arc" width="200" height="120"></canvas>
+      <div class="gas-val" id="gas-val">──</div>
+      <div class="gas-sub">GWEI BASE FEE</div>
+    </section>
+
+    <section class="panel" id="sys-panel">
+      <div class="panel-title">SYSTEM</div>
+      <div class="sys-grid">
+        <div class="sys-item"><span class="sys-label">UPTIME</span><span id="sys-uptime">──</span></div>
+        <div class="sys-item"><span class="sys-label">SCANS</span><span id="sys-scans">0</span></div>
+        <div class="sys-item"><span class="sys-label">ETH PRICE</span><span id="sys-eth">$──</span></div>
+        <div class="sys-item"><span class="sys-label">POOLS</span><span id="sys-pools">0</span></div>
+        <div class="sys-item"><span class="sys-label">DRY RUN</span><span id="sys-dry">OFF</span></div>
+        <div class="sys-item"><span class="sys-label">CHAIN</span><span id="sys-chain">ETH</span></div>
+      </div>
+    </section>
+
+    <section class="panel" id="kelly-chart-panel">
+      <div class="panel-title">KELLY HISTORY  <span class="sub">last 50 trades</span></div>
+      <canvas id="kelly-chart" width="300" height="120"></canvas>
+    </section>
+  </div>
+
+  <!-- Row 3: Live opportunity feed -->
+  <section class="panel panel-full" id="opp-panel">
+    <div class="panel-title">OPPORTUNITY FEED  <span class="sub" id="opp-count">0 viable</span></div>
+    <div class="table-wrap">
+      <table id="opp-table">
+        <thead>
+          <tr>
+            <th>TIME</th><th>ROUTE</th><th>PROTOCOL</th>
+            <th>LOAN</th><th>E[PROFIT]</th><th>±σ</th>
+            <th>P(+)</th><th>AI SCORE</th><th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="opp-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Row 4: Trade history -->
+  <section class="panel panel-full" id="trade-panel">
+    <div class="panel-title">TRADE HISTORY</div>
+    <div class="table-wrap">
+      <table id="trade-table">
+        <thead>
+          <tr>
+            <th>TIME</th><th>TX</th><th>LOAN</th>
+            <th>GROSS</th><th>GAS</th><th>NET</th><th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="trade-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
