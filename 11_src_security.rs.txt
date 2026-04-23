@@ -212,14 +212,21 @@ pub fn analyze_security(disasm: &Disassembly) -> SecurityReport {
             }
 
             // ── Hardcoded ETH transfer ────────────────────────────────────
-            // PUSH20 (address) + ... + CALL pattern
+            // PUSH20 (address) + ... + CALL or ERC-20 transfer selector pattern
             0x73 => {
                 if let Some(hex) = &ins.imm {
                     // Non-zero, non-contract-self address pushed
                     let is_zero = hex.chars().all(|c| c == '0');
                     if !is_zero {
-                        let near_call = instrs[i..].iter().take(10)
-                            .any(|x| x.opcode == 0xf1 || x.opcode == 0xa9059cbb_u32 as u8);
+                        let near_call = instrs[i..].iter().take(10).any(|x| {
+                            x.opcode == 0xf1 || (
+                                x.opcode == 0x63 &&
+                                x.imm
+                                    .as_deref()
+                                    .map(|imm| imm.trim_start_matches("0x").eq_ignore_ascii_case("a9059cbb"))
+                                    .unwrap_or(false)
+                            )
+                        });
                         if near_call {
                             findings.push(finding(
                                 Severity::Info,
