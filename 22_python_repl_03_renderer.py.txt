@@ -6,13 +6,22 @@ from __future__ import annotations
 import re, textwrap
 from typing import Optional
 
-from repl_01_core import (
-    C, _W, _backend_name,
-    progress_bar, section, badge,
-    risk_colour, risk_label, severity_colour,
-    hex_dump, cat_col,
-)
-from repl_02_analysis import AnalysisResult
+try:
+    from .repl_01_core import (
+        C, _W, _backend_name,
+        progress_bar, section, badge,
+        risk_colour, risk_label, severity_colour,
+        hex_dump, cat_col,
+    )
+    from .repl_02_analysis import AnalysisResult
+except ImportError:
+    from repl_01_core import (
+        C, _W, _backend_name,
+        progress_bar, section, badge,
+        risk_colour, risk_label, severity_colour,
+        hex_dump, cat_col,
+    )
+    from repl_02_analysis import AnalysisResult
 
 def render_report(r: AnalysisResult) -> str:
     """Render a full human-readable colour report. Returns string."""
