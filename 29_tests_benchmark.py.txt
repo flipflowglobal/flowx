@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""
+tests/benchmark.py — Speed comparison: Cython vs subprocess vs pure Python
+
+Run from hinsdale/ root:
+    python tests/benchmark.py
+    python tests/benchmark.py --n 100
+"""
+import sys, os, time, argparse
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
+
+AUREON_HEX = (
+    "608060405234801561000f575f80fd5b506004361061006f575f3560e01c8063839006f21161004d"
+    "578063839006f214610105578063839006f214610105578063839006f214610105575b5f80fd5b61"
+    "00866100813660046107cb565b61013a565b005b61009b61009636600461007f3565b6102c2565b"
+    "60405190151581526020015b60405180910390f35b6001546100d09073ffffffffffffffffffff"
+    "ffffffffffffffffffff1681565b60405173ffffffffffffffffffffffffffffffffffffffffffff"
+    "ff90911681526020016100a7565b610086610103366004610891565b610526565b5f546100d09073"
+    "ffffffffffffffffffffffffffffffffffffff1681565b610086610135366004610891565b6106dc"
+    "565b5f5473ffffffffffffffffffffffffffffffffffffffff163314"
+    "6101bf576040517f08c379a00000000000000000000000000000000000000000000000000000000"
+    "0815260206004820152600960248201527f4e6f74206f776e6572000000000000000000000000"
+    "000000000000000000000060448201526064015b60405180910390fd5b"
+    "6040517f42b0b77c00000000000000000000000000000000000000000000000000000000"
+    "815230600482015273ffffffffffffffffffffffffffffffffffffffff831660248201"
+    "526044810182905260a0606482015260a482018190526084820152"
+    "736ae43d3271ff6888e7fc43fd7321a503ff738951906342b0b77c9060c4015f604051"
+    "808303815f87803b158015610258575f80fd5b505af115801561026a573d5f803e3d5ffd5b"
+    "505050508173ffffffffffffffffffffffffffffffffffffffff167f508edf42c5f0ad5e7945"
+    "ee5c07dd6109cab2494ab0954a225272924f2cdf6e73826040516102b691815260200190565b"
+    "60405180910390a25050"
+)
+
+def bench(name, fn, n):
+    # Warmup
+    fn()
+    t0 = time.perf_counter()
+    for _ in range(n):
+        fn()
+    elapsed = time.perf_counter() - t0
+    per_call = elapsed / n * 1000
+    print(f"  {name:30s}  {per_call:8.3f} ms/call  ({n} iters, {elapsed:.2f}s total)")
+    return per_call
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--n", type=int, default=50, help="Iterations per backend")
+    args = parser.parse_args()
+    N = args.n
+
+    print()
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║         HINSDALE BENCHMARK — CYTHON vs SUBPROCESS        ║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    print(f"  Bytecode: {len(AUREON_HEX)//2} bytes  |  Iterations: {N}")
+    print()
+
+    results = {}
+
+    # ── 1. Cython (direct FFI) ────────────────────────────────────────────
+    try:
+        import _hinsdale as cy
+        print(f"  Cython backend: {cy.version()}")
+
+        def _cy_full():
+            ctx = cy.analyze(AUREON_HEX)
+            _ = ctx.pseudo_source()
+            _ = ctx.functions()
+            _ = ctx.findings()
+
+        def _cy_disasm():
+            ctx = cy.analyze(AUREON_HEX)
+            _ = ctx.instructions_numpy()
+
+        def _cy_risk():
+            ctx = cy.analyze(AUREON_HEX)
+            return ctx.risk_score()
+
+        print()
+        print("  [CYTHON — direct C FFI, GIL released]")
+        results["cy_full"]   = bench("full analysis (Cython)",    _cy_full,   N)
+        results["cy_disasm"] = bench("disasm+numpy (Cython)",      _cy_disasm, N)
+        results["cy_risk"]   = bench("risk_score only (Cython)",   _cy_risk,   N)
+
+    except ImportError:
+        print("  [CYTHON] Not compiled. Run: python setup_cython.py build_ext --inplace")
+
+    # ── 2. Subprocess JSON ────────────────────────────────────────────────
+    try:
+        from hinsdale import Hinsdale
+        h = Hinsdale()
+        if h._using_rust:
+            def _sub_full():
+                r = h.analyze(AUREON_HEX)
+                _ = r.pseudo_source
+                _ = r.functions
+                _ = r.findings
+            print()
+            print("  [SUBPROCESS — JSON pipe to hinsdale-cli]")
+            results["sub_full"] = bench("full analysis (subprocess)", _sub_full, min(N, 20))
+        else:
+            print("  [SUBPROCESS] hinsdale-cli binary not found")
+    except Exception as e:
+        print(f"  [SUBPROCESS] Error: {e}")
+
+    # ── 3. Pure Python disasm ─────────────────────────────────────────────
+    try:
+        from hinsdale import _py_disassemble, _py_fallback
+        raw = bytes.fromhex(AUREON_HEX)
+
+        def _py_disasm():
+            return _py_disassemble(raw)
+
+        def _py_full():
+            return _py_fallback(raw)
+
+        print()
+        print("  [PURE PYTHON — reference baseline]")
+        results["py_disasm"] = bench("disasm (Python)",      _py_disasm, N)
+        results["py_full"]   = bench("full fallback (Python)", _py_full, N)
+    except Exception as e:
+        print(f"  [PYTHON] Error: {e}")
+
+    # ── Speedup summary ───────────────────────────────────────────────────
+    print()
+    print("  ── Speedup ratios ───────────────────────────────────────")
+    if "cy_full" in results and "sub_full" in results:
+        ratio = results["sub_full"] / results["cy_full"]
+        print(f"  Cython vs Subprocess:  {ratio:.1f}x faster")
+    if "cy_disasm" in results and "py_disasm" in results:
+        ratio = results["py_disasm"] / results["cy_disasm"]
+        print(f"  Cython vs Python disasm: {ratio:.1f}x faster")
+    if "cy_full" in results and "py_full" in results:
+        ratio = results["py_full"] / results["cy_full"]
+        print(f"  Cython vs Python full:  {ratio:.1f}x faster")
+    print()
+
+if __name__ == "__main__":
+    main()

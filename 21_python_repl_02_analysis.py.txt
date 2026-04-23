@@ -1,0 +1,203 @@
+# repl_02_analysis.py — Analysis driver and AnalysisResult dataclass
+# Part 2 of hinsdale_repl — import via: from repl_02_analysis import *
+# Depends on: repl_01_core (C, _W, _BACKEND, _cy, _sub, _backend_name)
+
+from __future__ import annotations
+import re, sys, time
+from typing import Optional
+from datetime import datetime
+
+# Re-import shared state from core
+from repl_01_core import (
+    C, _W, _BACKEND, _backend_name,
+    risk_colour, risk_label,
+)
+
+try:
+    import _hinsdale as _cy
+except ImportError:
+    _cy = None
+
+try:
+    from hinsdale import Hinsdale as _HinsdaleSubproc
+    _sub_inst = _HinsdaleSubproc()
+except Exception:
+    _sub_inst = None
+
+# ── AnalysisResult dataclass ──────────────────────────────────────────────
+
+class AnalysisResult:
+    """Holds everything extracted from one bytecode analysis."""
+    def __init__(self):
+        self.raw_hex:         str           = ""
+        self.raw_bytes:       bytes         = b""
+        self.bytecode_len:    int           = 0
+        self.elapsed_ms:      float         = 0.0
+        self.is_runtime:      bool          = False
+        self.is_proxy:        bool          = False
+        self.is_erc20:        bool          = False
+        self.is_erc721:       bool          = False
+        self.solc_hint:       Optional[str] = None
+        self.instr_count:     int           = 0
+        self.block_count:     int           = 0
+        self.edge_count:      int           = 0
+        self.jumpdest_count:  int           = 0
+        self.instructions:    list          = []
+        self.functions:       list          = []
+        self.event_topics:    list          = []
+        self.findings:        list          = []
+        self.risk_score:      int           = 0
+        self.has_selfdestruct:bool          = False
+        self.has_delegatecall:bool          = False
+        self.has_create2:     bool          = False
+        self.sstore_count:    int           = 0
+        self.sload_count:     int           = 0
+        self.call_count:      int           = 0
+        self.pseudo_source:   str           = ""
+        self.storage_slots:   list          = []
+        self.timestamp:       str           = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.opcode_freq:     dict          = {}
+
+# ── Analysis driver ────────────────────────────────────────────────────────
+
+def _do_analysis(bytecode_input, on_phase=None) -> AnalysisResult:
+    """
+    Full analysis with phase callbacks for live progress.
+    on_phase(name: str, fraction: float) called at each stage.
+    Never raises — errors stored in result.pseudo_source.
+    """
+    r = AnalysisResult()
+
+    # ── Parse input ───────────────────────────────────────────────────────
+    try:
+        if isinstance(bytecode_input, (bytes, bytearray)):
+            r.raw_bytes = bytes(bytecode_input)
+            r.raw_hex   = r.raw_bytes.hex()
+        else:
+            clean = bytecode_input.strip()
+            if clean.startswith(("0x", "0X")):
+                clean = clean[2:]
+            clean = re.sub(r'\s+', '', clean)
+            if not clean:
+                raise ValueError("Empty bytecode input")
+            if len(clean) % 2 != 0:
+                raise ValueError(f"Odd hex length ({len(clean)} chars) — incomplete byte")
+            r.raw_bytes = bytes.fromhex(clean)
+            r.raw_hex   = clean
+        r.bytecode_len = len(r.raw_bytes)
+    except Exception as e:
+        r.pseudo_source = f"[INPUT ERROR] {e}"
+        return r
+
+    if on_phase: on_phase("Parsing input", 0.05)
+
+    t0 = time.perf_counter()
+
+    try:
+        if _BACKEND == "cython" and _cy:
+            # ── Cython/Rust path ──────────────────────────────────────────
+            ctx = _cy.analyze(r.raw_bytes)
+
+            if on_phase: on_phase("Disassembling", 0.20)
+            r.instructions = ctx.instructions()
+            r.instr_count  = len(r.instructions)
+
+            if on_phase: on_phase("Building CFG", 0.40)
+            summ = ctx.summary()
+            r.block_count     = summ.block_count
+            r.edge_count      = summ.edge_count
+            r.jumpdest_count  = summ.jumpdest_count
+            r.is_runtime      = summ.is_runtime
+            r.is_proxy        = summ.is_proxy
+            r.is_erc20        = summ.is_erc20_like
+            r.is_erc721       = summ.is_erc721_like
+            r.solc_hint       = summ.solc_version_hint
+            r.elapsed_ms      = summ.elapsed_ms
+
+            if on_phase: on_phase("Recovering signatures", 0.55)
+            r.functions = ctx.functions()
+
+            if on_phase: on_phase("Security analysis", 0.70)
+            r.findings         = ctx.findings()
+            r.risk_score       = summ.risk_score
+            r.has_selfdestruct = summ.has_selfdestruct
+            r.has_delegatecall = summ.has_delegatecall
+            r.has_create2      = summ.has_create2
+            r.sstore_count     = summ.sstore_count
+            r.sload_count      = summ.sload_count
+            r.call_count       = summ.call_count
+
+            if on_phase: on_phase("Decompiling", 0.85)
+            r.pseudo_source = ctx.pseudo_source()
+
+            if on_phase: on_phase("Rendering", 0.95)
+
+        elif _BACKEND == "subprocess" and _sub_inst:
+            # ── Subprocess/JSON path ──────────────────────────────────────
+            if on_phase: on_phase("Analyzing (subprocess)", 0.30)
+            rep = _sub_inst.analyze(r.raw_bytes)
+
+            if on_phase: on_phase("Building CFG", 0.50)
+            r.instr_count     = rep.disassembly.instruction_count
+            r.block_count     = rep.cfg_summary.block_count
+            r.edge_count      = rep.cfg_summary.edge_count
+            r.jumpdest_count  = rep.cfg_summary.jumpdest_count
+            r.is_runtime      = rep.metadata.is_runtime
+            r.is_proxy        = rep.metadata.is_proxy
+            r.is_erc20        = rep.metadata.is_erc20_like
+            r.is_erc721       = rep.metadata.is_erc721_like
+            r.solc_hint       = rep.metadata.solc_version_hint
+            r.elapsed_ms      = rep.elapsed_ms
+
+            if on_phase: on_phase("Recovering signatures", 0.65)
+            r.functions = rep.signatures.functions
+
+            if on_phase: on_phase("Security analysis", 0.80)
+            r.findings         = rep.security.findings
+            r.risk_score       = rep.security.risk_score
+            r.has_selfdestruct = rep.security.has_selfdestruct
+            r.has_delegatecall = rep.security.has_delegatecall
+            r.has_create2      = rep.security.has_create2
+            r.sstore_count     = rep.security.sstore_count
+            r.sload_count      = rep.security.sload_count
+            r.call_count       = rep.security.call_count
+
+            if on_phase: on_phase("Decompiling", 0.90)
+            r.pseudo_source = rep.pseudo_source
+            r.instructions  = rep.disassembly.instructions
+
+        else:
+            # ── Pure Python fallback ──────────────────────────────────────
+            if on_phase: on_phase("Disassembling (Python)", 0.30)
+            from hinsdale import _py_disassemble, _py_fallback
+            r.instructions = _py_disassemble(r.raw_bytes)
+            r.instr_count  = len(r.instructions)
+
+            if on_phase: on_phase("Basic analysis", 0.70)
+            rep = _py_fallback(r.raw_bytes)
+            r.functions        = rep.signatures.functions
+            r.findings         = rep.security.findings
+            r.risk_score       = rep.security.risk_score
+            r.has_selfdestruct = rep.security.has_selfdestruct
+            r.has_delegatecall = rep.security.has_delegatecall
+            r.pseudo_source    = rep.pseudo_source
+            r.elapsed_ms       = rep.elapsed_ms
+
+    except Exception as e:
+        r.pseudo_source = f"[ANALYSIS ERROR] {e}"
+        r.elapsed_ms    = (time.perf_counter() - t0) * 1000
+        return r
+
+    r.elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    # ── Opcode frequency ─────────────────────────────────────────────────
+    freq = {}
+    for ins in r.instructions:
+        mn = getattr(ins, 'mnemonic', None)
+        if mn:
+            base = mn.split()[0]
+            freq[base] = freq.get(base, 0) + 1
+    r.opcode_freq = dict(sorted(freq.items(), key=lambda x: -x[1])[:20])
+
+    if on_phase: on_phase("Complete", 1.00)
+    return r

@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""
+setup_cython.py — Build the Hinsdale Cython extension
+
+Usage (from hinsdale/ root):
+    python setup_cython.py build_ext --inplace      # dev build
+    python setup_cython.py install                  # system install
+
+Termux / aarch64:
+    ANDROID_API_LEVEL=24 python setup_cython.py build_ext --inplace
+
+Rust lib must be compiled first (or set build=True to auto-compile):
+    cargo build --release   → target/release/libhinsdale.so
+"""
+
+import os, sys, subprocess
+from pathlib import Path
+from setuptools import setup, Extension
+
+try:
+    from Cython.Build import cythonize
+    import numpy as np
+    HAVE_CYTHON = True
+except ImportError:
+    HAVE_CYTHON = False
+    print("[ERROR] Cython or numpy not installed. Run: pip install cython numpy")
+    sys.exit(1)
+
+HERE       = Path(__file__).parent.resolve()
+CY_DIR     = HERE / "cython"
+TARGET_DIR = HERE / "target" / "release"
+
+IS_ANDROID = "ANDROID_API_LEVEL" in os.environ or Path("/data/data/com.termux").exists()
+IS_MACOS   = sys.platform == "darwin"
+
+LIB_FILE = TARGET_DIR / ("libhinsdale.dylib" if IS_MACOS else "libhinsdale.so")
+
+def ensure_rust():
+    if LIB_FILE.exists():
+        print(f"[setup] Rust lib: {LIB_FILE}")
+        return
+    print("[setup] Building Rust library...")
+    env = os.environ.copy()
+    if IS_ANDROID:
+        env.setdefault("ANDROID_API_LEVEL", "24")
+        env.setdefault("CC", "clang")
+    r = subprocess.run(["cargo", "build", "--release", "--lib"], cwd=HERE, env=env)
+    if r.returncode != 0:
+        print("[ERROR] cargo build failed")
+        sys.exit(1)
+
+ensure_rust()
+
+# ── Compiler flags ─────────────────────────────────────────────────────────
+
+compile_args = ["-O3", "-fno-strict-aliasing", "-Wno-unused-function"]
+if IS_ANDROID:
+    api  = os.environ.get("ANDROID_API_LEVEL", "24")
+    arch = "aarch64-linux-android"
+    compile_args += [f"--target={arch}{api}", "-march=armv8-a"]
+elif not IS_MACOS:
+    compile_args += ["-march=native"]
+
+link_args = []
+rpath = str(TARGET_DIR)
+if IS_MACOS:
+    link_args += [f"-Wl,-rpath,{rpath}"]
+else:
+    link_args += [
+        f"-Wl,-rpath,{rpath}",
+        "-Wl,-rpath,$ORIGIN",
+        "-Wl,-rpath,$ORIGIN/../target/release",
+    ]
+
+ext = Extension(
+    name               = "_hinsdale",
+    sources            = [str(CY_DIR / "_hinsdale.pyx")],
+    include_dirs       = [str(CY_DIR), np.get_include()],
+    library_dirs       = [str(TARGET_DIR)],
+    libraries          = ["hinsdale"],
+    extra_compile_args = compile_args,
+    extra_link_args    = link_args,
+    language           = "c",
+    define_macros      = [("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+)
+
+setup(
+    name            = "hinsdale",
+    version         = "1.0.0",
+    description     = "Hinsdale EVM Decompiler — Cython/Rust extension",
+    ext_modules     = cythonize(
+        [ext],
+        compiler_directives={
+            "language_level":   "3",
+            "boundscheck":      False,
+            "wraparound":       False,
+            "cdivision":        True,
+            "nonecheck":        False,
+            "embedsignature":   True,
+            "initializedcheck": False,
+            "profile":          False,
+        },
+        annotate=False,
+    ),
+    zip_safe        = False,
+    python_requires = ">=3.9",
+    install_requires = ["numpy>=1.21"],
+)
