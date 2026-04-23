@@ -100,9 +100,9 @@ if $IS_TERMUX; then
   export CFLAGS="${CFLAGS:--target=aarch64-linux-android$ANDROID_API_LEVEL}"
 fi
 
-cargo build --release --bin hinsdale-cli 2>&1 | tail -5
+cargo build --manifest-path "$SCRIPT_DIR/hinsdale/Cargo.toml" --release --bin hinsdale-cli 2>&1 | tail -5
 
-BINARY="$SCRIPT_DIR/target/release/hinsdale-cli"
+BINARY="$SCRIPT_DIR/hinsdale/target/release/hinsdale-cli"
 
 if [ ! -f "$BINARY" ]; then
   err "Build failed — binary not found at $BINARY"
