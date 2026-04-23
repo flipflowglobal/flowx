@@ -14,6 +14,8 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use crate::{analyze, parse_hex, HinsdaleReport};
 
+const HINS_VERSION_CSTR: &[u8] = b"1.0.0-cython\0";
+
 // ── Opaque context ─────────────────────────────────────────────────────────
 
 pub struct HinsdaleCtx(HinsdaleReport);
@@ -468,7 +470,7 @@ pub extern "C" fn hins_jumpdests(ctx: *const HinsdaleCtx, buf: *mut u32, buf_cou
 
 #[no_mangle]
 pub extern "C" fn hins_version() -> *const c_char {
-    b"1.0.0-cython\0".as_ptr() as *const c_char
+    HINS_VERSION_CSTR.as_ptr() as *const c_char
 }
 
 // ── Struct size query (for runtime verification) ──────────────────────────

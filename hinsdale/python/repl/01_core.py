@@ -36,10 +36,14 @@ import signal
 import textwrap
 import threading
 import itertools
-import readline  # enables arrow keys / history in input()
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+
+try:
+    import readline  # enables arrow keys / history in input()
+except Exception:
+    readline = None
 
 # ── Terminal width ────────────────────────────────────────────────────────
 
@@ -240,4 +244,3 @@ _CAT_COLOUR = {
 
 def cat_col(cat: str) -> str:
     return _CAT_COLOUR.get(cat.upper(), C.DIM)
-
