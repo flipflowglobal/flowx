@@ -160,7 +160,7 @@ class HinsdaleReport:
             if ins.imm:
                 arr[i]['imm_hex'] = ins.imm.encode()[:67]
                 arr[i]['imm_len'] = len(ins.imm) // 2
-            if ins.imm_u256 is not None:
+            if ins.imm_u256 is not None and 0 <= ins.imm_u256 <= 0xFFFFFFFFFFFFFFFF:
                 arr[i]['imm_u64']     = ins.imm_u256
                 arr[i]['has_imm_u64'] = 1
         return arr
