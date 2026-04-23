@@ -1,57 +1,10 @@
-# HINSDALE EVM DECOMPILER
-**Rust core • Python FFI • Termux aarch64 optimized**
+# Documentation moved
 
-Built from the Aureon compiler stack — deciphers EVM bytecode at extreme length and difficulty.
+This file is not the canonical project README.
 
----
+The main project documentation should live in `README.md` at the repository root so that GitHub and other tooling can discover and render it automatically.
 
-## Architecture
-
-```
-bytecode (hex / bytes)
-      │
-      ▼
- ┌─────────────────────────────────────────────────────┐
- │              RUST CORE (hinsdale-cli)               │
- │                                                     │
- │  opcodes.rs  ──  complete EVM table (Cancun)        │
- │  disasm.rs   ──  linear sweep + JUMPDEST map        │
- │  cfg.rs      ──  basic block CFG + edge resolution  │
- │  signatures.rs── dispatcher pattern → selectors     │
- │  security.rs ──  reentrancy / selfdestruct / etc    │
- │  decompiler.rs── symbolic stack → pseudo-Solidity   │
- │  lib.rs      ──  full pipeline + JSON output        │
- └─────────────────────────────────────────────────────┘
-      │  JSON (subprocess pipe)
-      ▼
- ┌─────────────────────────────────────────────────────┐
- │          PYTHON WRAPPER (hinsdale.py)               │
- │                                                     │
- │  HinsdaleReport dataclass with convenience props   │
- │  Pure-Python fallback (disasm + basic sigs)         │
- │  CLI with --json / --disasm-only / --sigs-only      │
- └─────────────────────────────────────────────────────┘
-```
-
----
-
-## Termux Install (one command)
-
-```bash
-# Clone or copy hinsdale/ to Termux
-cd ~/hinsdale
-bash install_hinsdale.sh
-```
-
-The script:
-1. `pkg install rust python` (if not present)
-2. `cargo build --release` with aarch64 flags
-3. Copies `hinsdale-cli` binary to Termux PATH
-4. Installs Python wrapper as `hinsdale` CLI
-
-### Manual build (if you prefer)
-
-```bash
+If the content previously stored here is intended to be the primary project README, move it into `README.md` and remove this numbered `.txt` copy.
 # In Termux
 pkg install rust python python-pip
 
