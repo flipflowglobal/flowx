@@ -117,8 +117,6 @@ impl Val {
             },
             Val::And(a, b) => match (a.fold(), b.fold()) {
                 (Val::Const(x), Val::Const(y)) => Val::Const(x & y),
-                // AND with address mask (20 bytes = 0xffffffffffffffffffffffffffffffffffffffff)
-                (Val::Const(x), fb) if x == 0xffffffffffffffff => Val::And(Box::new(Val::Const(x)), Box::new(fb)),
                 (fa, Val::Const(y)) if y == 0 => Val::Const(0),
                 (fa, fb) => Val::And(Box::new(fa), Box::new(fb)),
             },
@@ -129,7 +127,9 @@ impl Val {
                 (fa, fb) => Val::Or(Box::new(fa), Box::new(fb)),
             },
             Val::Shr { shift, value } => match (shift.fold(), value.fold()) {
-                (Val::Const(s), Val::Const(v)) => Val::Const(v >> s.min(63)),
+                (Val::Const(s), Val::Const(v)) => {
+                    if s >= 64 { Val::Const(0) } else { Val::Const(v >> s) }
+                }
                 (Val::Const(96), fv) => Val::And(
                     Box::new(fv),
                     Box::new(Val::Unknown("address_mask".into())),
@@ -137,7 +137,9 @@ impl Val {
                 (fs, fv) => Val::Shr { shift: Box::new(fs), value: Box::new(fv) },
             },
             Val::Shl { shift, value } => match (shift.fold(), value.fold()) {
-                (Val::Const(s), Val::Const(v)) => Val::Const(v.wrapping_shl(s.min(63) as u32)),
+                (Val::Const(s), Val::Const(v)) => {
+                    if s >= 64 { Val::Const(0) } else { Val::Const(v.wrapping_shl(s as u32)) }
+                }
                 (fs, fv) => Val::Shl { shift: Box::new(fs), value: Box::new(fv) },
             },
             Val::IsZero(v) => match v.fold() {

@@ -101,7 +101,7 @@ fn lift_functions(
                 for &bid in &ids { covered.insert(bid); }
 
                 let name = sig.known_name.clone()
-                    .map(|n| n.split('(').next().unwrap_or(&n).to_string())
+                    .map(|n| n.split('(').next().unwrap_or(n.as_str()).to_string())
                     .unwrap_or_else(|| format!("fn_{}", &sig.selector[2..6]));
 
                 groups.push(FnGroup {
