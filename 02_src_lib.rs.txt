@@ -1,0 +1,130 @@
+// NOTE: This root-level `02_src_lib.rs.txt` file is not part of the Cargo crate.
+// The real library entry point lives under `hinsdale/src/lib.rs`.
+//
+// Keep the public API, module declarations, and implementation in the real crate
+// source file so the code is actually compiled, tested, and shipped.
+//
+// This numbered `.txt` file should not contain an authoritative copy of `src/lib.rs`,
+// because it can silently diverge from `hinsdale/src/lib.rs`.
+//
+// Apply any intended changes to:
+//     hinsdale/src/lib.rs
+//
+// After those changes are moved to the real crate source, this review artifact
+// should be removed.
+
+// Intentionally left as a note-only file to avoid duplicating live Rust source.
+
+// Previous contents in this file mirrored a crate-root Rust module and public API.
+// That implementation belongs in `hinsdale/src/lib.rs`, not here.
+
+// See the real crate source for:
+// - `pub mod` declarations
+// - `HinsdaleReport`, `Metadata`, and `CfgSummary`
+// - `parse_hex`
+// - the `analyze()` pipeline entry point
+//
+// Keeping those definitions only in the actual crate source prevents drift.
+
+// End of note for numbered review artifact.
+pub fn analyze(bytecode: &[u8]) -> HinsdaleReport {
+    let t0 = Instant::now();
+
+    // 1. Disassemble
+    let disassembly = disasm::disassemble(bytecode);
+
+    // 2. CFG
+    let cfg = cfg::build_cfg(&disassembly);
+    let cfg_summary = CfgSummary {
+        block_count:    cfg.block_count(),
+        edge_count:     cfg.edge_count(),
+        jumpdest_count: disassembly.jumpdests.len(),
+    };
+
+    // 3. Signatures
+    let signatures = signatures::recover_signatures(&disassembly);
+
+    // 4. Security
+    let security = security::analyze_security(&disassembly);
+
+    // 5. Decompile
+    let decompiled = decompiler::decompile(&disassembly, &cfg, &signatures);
+
+    // 6. Metadata heuristics
+    let is_runtime = bytecode.len() >= 3
+        && bytecode[0] == 0x60
+        && bytecode[1] == 0x80
+        && bytecode[2] == 0x60;
+
+    let is_erc20_like = signatures.functions.iter().any(|f| {
+        f.known_name.as_deref().map(|n| {
+            n.contains("transfer") || n.contains("balanceOf") || n.contains("approve")
+        }).unwrap_or(false)
+    });
+
+    let is_erc721_like = signatures.functions.iter().any(|f| {
+        f.known_name.as_deref().map(|n| {
+            n.contains("tokenURI") || n.contains("ownerOf") || n.contains("safeTransfer")
+        }).unwrap_or(false)
+    });
+
+    // Simple proxy detection: tiny bytecode with DELEGATECALL
+    let is_proxy = security.has_delegatecall && bytecode.len() < 500;
+
+    // Solc version hint: look for PUSH1 0x XX patterns in metadata suffix
+    let solc_version_hint = extract_solc_version(bytecode);
+
+    let metadata = Metadata {
+        bytecode_len: bytecode.len(),
+        is_runtime,
+        solc_version_hint,
+        is_proxy,
+        is_erc20_like,
+        is_erc721_like,
+    };
+
+    HinsdaleReport {
+        metadata,
+        disassembly,
+        cfg_summary,
+        signatures,
+        security,
+        decompiled,
+        elapsed_ms: t0.elapsed().as_secs_f64() * 1000.0,
+    }
+}
+
+/// EVM bytecode often ends with CBOR-encoded compiler metadata.
+/// The last 2 bytes are the CBOR length. Bytes before that may contain
+/// the Solidity version string bzzr0/bzzr1/ipfs.
+fn extract_solc_version(bytecode: &[u8]) -> Option<String> {
+    let n = bytecode.len();
+    if n < 4 { return None; }
+
+    // Read last 2 bytes as big-endian metadata length
+    let meta_len = u16::from_be_bytes([bytecode[n-2], bytecode[n-1]]) as usize;
+    if meta_len + 2 > n || meta_len < 5 { return None; }
+
+    let meta_slice = &bytecode[n - 2 - meta_len .. n - 2];
+
+    // Look for CBOR map key 0x64 "solc" (0xa1 0x64 "solc" 0x43 <3 bytes>)
+    // or the ASCII bytes for "solc"
+    if let Some(pos) = meta_slice.windows(4).position(|w| w == b"solc") {
+        let after = &meta_slice[pos + 4..];
+        if after.len() >= 4 {
+            let major = after[1];
+            let minor = after[2];
+            let patch = after[3];
+            if major <= 1 && minor <= 20 {
+                return Some(format!("^0.{minor}.{patch}"));
+            }
+        }
+    }
+
+    // Fallback: scan for 0x00 0x82 pattern common in ipfs metadata
+    if meta_slice.iter().any(|&b| b == 0xa2 || b == 0xa1) {
+        return Some("(solc metadata detected, version unreadable)".into());
+    }
+
+    None
+}

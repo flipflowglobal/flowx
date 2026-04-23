@@ -1,0 +1,107 @@
+// ── Symbolic Stack ─────────────────────────────────────────────────────────
+
+#[derive(Clone, Debug)]
+pub struct SymStack {
+    items: Vec<Val>,
+}
+
+impl SymStack {
+    pub fn new() -> Self { Self { items: Vec::with_capacity(64) } }
+
+    pub fn push(&mut self, v: Val) {
+        self.items.push(v.fold());
+    }
+
+    pub fn pop(&mut self) -> Val {
+        self.items.pop().unwrap_or(Val::Unknown("underflow".into()))
+    }
+
+    pub fn peek(&self) -> Option<&Val> { self.items.last() }
+
+    pub fn depth(&self) -> usize { self.items.len() }
+
+    pub fn dup(&mut self, n: usize) {
+        let len = self.items.len();
+        if len >= n {
+            let v = self.items[len - n].clone();
+            self.items.push(v);
+        } else {
+            self.items.push(Val::Unknown(format!("dup{n}_underflow")));
+        }
+    }
+
+    pub fn swap(&mut self, n: usize) {
+        let len = self.items.len();
+        if len > n { self.items.swap(len - 1, len - 1 - n); }
+    }
+}
+
+// ── Statement IR ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Stmt {
+    Assign      { lhs: String, rhs: String },
+    SStore      { slot: String, value: String },
+    MStore      { offset: String, value: String },
+    Return      { value: String },
+    Revert      { reason: String },
+    Stop,
+    Require     { cond: String, msg: Option<String> },
+    IfGoto      { cond: String, target: usize },
+    Goto        { target: usize },
+    Emit        { name: String, args: Vec<String> },
+    Call        { success_var: String, to: String, value: String, data: String },
+    DelegateCall{ success_var: String, to: String, data: String },
+    StaticCall  { success_var: String, to: String, data: String },
+    SelfDestruct{ recipient: String },
+    Comment     (String),
+    Label       (usize),   // block id marker
+}
+
+impl Stmt {
+    pub fn render(&self, indent: &str) -> String {
+        match self {
+            Stmt::Assign { lhs, rhs }        => format!("{indent}{lhs} = {rhs};"),
+            Stmt::SStore { slot, value }      => format!("{indent}// SSTORE: {slot} = {value};"),
+            Stmt::MStore { offset, value }    => format!("{indent}// mstore({offset}, {value});"),
+            Stmt::Return { value }            => format!("{indent}return {value};"),
+            Stmt::Revert { reason }           => format!("{indent}revert({reason});"),
+            Stmt::Stop                        => format!("{indent}// STOP"),
+            Stmt::Require { cond, msg }       => {
+                match msg {
+                    Some(m) => format!("{indent}require({cond}, \"{m}\");"),
+                    None    => format!("{indent}require({cond});"),
+                }
+            }
+            Stmt::IfGoto { cond, target }     => format!("{indent}if ({cond}) goto block_{target};"),
+            Stmt::Goto { target }             => format!("{indent}goto block_{target};"),
+            Stmt::Emit { name, args }         => format!("{indent}emit {name}({});", args.join(", ")),
+            Stmt::Call { success_var, to, value, data } => {
+                if data.is_empty() || data == "0x" {
+                    format!("{indent}(bool {success_var},) = {to}.call{{value: {value}}}(\"\");")
+                } else {
+                    format!("{indent}(bool {success_var},) = {to}.call{{value: {value}}}({data});")
+                }
+            }
+            Stmt::DelegateCall { success_var, to, data } =>
+                format!("{indent}(bool {success_var},) = {to}.delegatecall({data});"),
+            Stmt::StaticCall { success_var, to, data } =>
+                format!("{indent}(bool {success_var},) = {to}.staticcall({data});"),
+            Stmt::SelfDestruct { recipient } =>
+                format!("{indent}selfdestruct(payable({recipient}));"),
+            Stmt::Comment(s)                  => format!("{indent}// {s}"),
+            Stmt::Label(id)                   => format!("/* block_{id}: */"),
+        }
+    }
+}
+
+// ── Block Execution Result ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct BlockResult {
+    pub block_id:   usize,
+    pub stmts:      Vec<Stmt>,
+    pub stack_out:  SymStack,      // stack state at block exit
+    pub params:     Vec<CalldataParam>,
+}
+

@@ -1,0 +1,7 @@
+This file is intentionally not a Cargo manifest.
+
+The authoritative Rust crate manifest for this project is:
+hinsdale/Cargo.toml
+
+Apply any package, dependency, feature, lib/bin, or profile changes there
+instead of adding or updating duplicate `Cargo.toml` content in this file.

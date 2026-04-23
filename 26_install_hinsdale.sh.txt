@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════
+# HINSDALE EVM DECOMPILER — Termux / Android aarch64 Install Script
+# ═══════════════════════════════════════════════════════════════════════════
+# Usage: bash install_hinsdale.sh
+#        bash install_hinsdale.sh --skip-rust   # if Rust already installed
+#        bash install_hinsdale.sh --dev          # also install Python dev deps
+
+set -euo pipefail
+
+BOLD="\033[1m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+log()  { echo -e "${GREEN}[HINSDALE]${RESET} $*"; }
+warn() { echo -e "${YELLOW}[WARN]${RESET}    $*"; }
+err()  { echo -e "${RED}[ERROR]${RESET}   $*" >&2; exit 1; }
+
+SKIP_RUST=false
+DEV_MODE=false
+for arg in "$@"; do
+  case $arg in
+    --skip-rust) SKIP_RUST=true  ;;
+    --dev)       DEV_MODE=true   ;;
+  esac
+done
+
+echo
+echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
+echo -e "${BOLD}║   HINSDALE EVM DECOMPILER — TERMUX INSTALLER v1.0       ║${RESET}"
+echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${RESET}"
+echo
+
+# ── 1. Detect environment ─────────────────────────────────────────────────
+ARCH=$(uname -m)
+OS=$(uname -o 2>/dev/null || uname -s)
+log "Platform: $OS $ARCH"
+
+IS_TERMUX=false
+if [ -d "/data/data/com.termux" ]; then
+  IS_TERMUX=true
+  log "Termux environment detected"
+fi
+
+# ── 2. Package dependencies ───────────────────────────────────────────────
+log "Installing system packages..."
+if $IS_TERMUX; then
+  pkg update -y -q
+  pkg install -y -q \
+    rust \
+    python \
+    python-pip \
+    openssl \
+    pkg-config \
+    binutils \
+    || warn "Some packages may have failed — continuing"
+else
+  # Linux / UserLAnd / WSL
+  which apt-get &>/dev/null && sudo apt-get install -y -q \
+    build-essential pkg-config libssl-dev python3 python3-pip rustc cargo 2>/dev/null || true
+  which dnf &>/dev/null && sudo dnf install -y openssl-devel python3 python3-pip rust cargo 2>/dev/null || true
+fi
+
+# ── 3. Rust toolchain ─────────────────────────────────────────────────────
+if ! $SKIP_RUST; then
+  if ! command -v cargo &>/dev/null; then
+    if $IS_TERMUX; then
+      # Rust comes via pkg on Termux — if not found, prompt
+      warn "cargo not found — try: pkg install rust"
+      exit 1
+    else
+      err "cargo not found. Install Rust using your distro package manager (for example: 'sudo apt-get install rustc cargo' or 'sudo dnf install rust cargo') and re-run this script."
+    fi
+  fi
+
+  RUST_VER=$(rustc --version)
+  log "Rust: $RUST_VER"
+
+  # Ensure we have the right target for aarch64
+  if [[ "$ARCH" == "aarch64" ]]; then
+    rustup target add aarch64-linux-android 2>/dev/null || true
+  fi
+fi
+
+# ── 4. Build Hinsdale ─────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+log "Building Hinsdale (release profile)..."
+
+# Termux Android API level needed for some crates
+export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-24}"
+
+# On Termux aarch64, set linker env
+if $IS_TERMUX; then
+  export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${CC:-aarch64-linux-android-clang}"
+  export CC="${CC:-clang}"
+  export CFLAGS="${CFLAGS:--target=aarch64-linux-android$ANDROID_API_LEVEL}"
+fi
+
+cargo build --manifest-path "$SCRIPT_DIR/hinsdale/Cargo.toml" --release --bin hinsdale-cli 2>&1 | tail -5
+
+BINARY="$SCRIPT_DIR/hinsdale/target/release/hinsdale-cli"
+
+if [ ! -f "$BINARY" ]; then
+  err "Build failed — binary not found at $BINARY"
+fi
+
+BINARY_SIZE=$(du -sh "$BINARY" | cut -f1)
+log "Binary built: $BINARY ($BINARY_SIZE)"
+
+# ── 5. Install binary to PATH ─────────────────────────────────────────────
+if $IS_TERMUX; then
+  BIN_DEST="/data/data/com.termux/files/usr/bin/hinsdale-cli"
+else
+  BIN_DEST="$HOME/.local/bin/hinsdale-cli"
+  mkdir -p "$HOME/.local/bin"
+fi
+
+cp "$BINARY" "$BIN_DEST"
+chmod +x "$BIN_DEST"
+log "Installed to: $BIN_DEST"
+
+# ── 6. Python deps + Cython ───────────────────────────────────────────────
+log "Installing Python dependencies..."
+pip install --break-system-packages --quiet \
+  cython numpy web3 python-dotenv requests 2>/dev/null || \
+pip install --quiet \
+  cython numpy web3 python-dotenv requests 2>/dev/null || \
+warn "pip install failed — subprocess fallback will be used"
+
+# ── 6b. Build Cython extension ────────────────────────────────────────────
+log "Building Cython extension (_hinsdale.so)..."
+cd "$SCRIPT_DIR"
+
+if python3 -c "import Cython, numpy" 2>/dev/null; then
+  # Build shared lib variant for Cython linking
+  cargo build --manifest-path "$SCRIPT_DIR/hinsdale/Cargo.toml" --release --lib 2>&1 | tail -3
+  python3 setup_cython.py build_ext --inplace 2>&1 | tail -10
+  CYTHON_SO=$(ls _hinsdale*.so 2>/dev/null | head -1)
+  if [ -n "$CYTHON_SO" ]; then
+    log "Cython extension built: $CYTHON_SO"
+    if $IS_TERMUX; then
+      SITE_PKG=$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null || echo "")
+      if [ -n "$SITE_PKG" ]; then
+        cp "$CYTHON_SO" "$SITE_PKG/"
+        cp "$SCRIPT_DIR/hinsdale/target/release/libhinsdale.so" "$SITE_PKG/" 2>/dev/null || true
+        log "Installed Cython extension to $SITE_PKG"
+      fi
+    fi
+  else
+    warn "Cython build failed — subprocess JSON fallback will be used"
+    warn "To retry: pip install cython numpy && python3 setup_cython.py build_ext --inplace"
+  fi
+else
+  warn "Cython/numpy not available — subprocess fallback active"
+  warn "Install with: pip install cython numpy"
+fi
+
+# ── 7. Install Python tools ───────────────────────────────────────────────
+if $IS_TERMUX; then
+  BIN_BASE="/data/data/com.termux/files/usr/bin"
+else
+  BIN_BASE="$HOME/.local/bin"
+  mkdir -p "$BIN_BASE"
+fi
+
+# Subprocess/JSON wrapper
+PYTHON_WRAPPER="$SCRIPT_DIR/python/hinsdale.py"
+if [ -f "$PYTHON_WRAPPER" ]; then
+  cp "$PYTHON_WRAPPER" "$BIN_BASE/hinsdale"
+  chmod +x "$BIN_BASE/hinsdale"
+  sed -i '1s|.*|#!/usr/bin/env python3|' "$BIN_BASE/hinsdale"
+  log "Python CLI → $BIN_BASE/hinsdale"
+fi
+
+# REPL (interactive shell)
+REPL_SRC="$SCRIPT_DIR/python/hinsdale_repl.py"
+if [ -f "$REPL_SRC" ]; then
+  cp "$REPL_SRC" "$BIN_BASE/hinsdale-repl"
+  chmod +x "$BIN_BASE/hinsdale-repl"
+  sed -i '1s|.*|#!/usr/bin/env python3|' "$BIN_BASE/hinsdale-repl"
+  log "Interactive REPL → $BIN_BASE/hinsdale-repl"
+fi
+
+# ── 8. Smoke test ─────────────────────────────────────────────────────────
+log "Running smoke test..."
+
+TEST_HEX="608060405234801561000f575f80fd5b506004361061004a5760003560e01c80638da5cb5b1461004f578063a9059cbb14610070575b600080fd5b610057610093565b60405173ffffffffffffffffffffffffffffffffffffffff909116815260200160405180910390f35b61008061007e366004610113565b005b60005473ffffffffffffffffffffffffffffffffffffffff1681565b6000546040517fa9059cbb00000000000000000000000000000000000000000000000000000000815273ffffffffffffffffffffffffffffffffffffffff9091169063a9059cbb906100eb90339085906004015b60405180910390a250565b60008060408385031215610126578182fd5b823573ffffffffffffffffffffffffffffffffffffffff8116811461014957600080fd5b946020939093013593505050565b00"
+
+SUMMARY=$("$BIN_DEST" --summary "$TEST_HEX" 2>/dev/null) || SUMMARY="(binary test failed)"
+log "Smoke test: $SUMMARY"
+
+# ── 9. Done ───────────────────────────────────────────────────────────────
+echo
+echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
+echo -e "${BOLD}║               HINSDALE INSTALLATION COMPLETE            ║${RESET}"
+echo -e "${BOLD}╠══════════════════════════════════════════════════════════╣${RESET}"
+echo -e "${BOLD}║  CLI usage:                                              ║${RESET}"
+echo -e "${BOLD}║    hinsdale-cli <hex>               # full report        ║${RESET}"
+echo -e "${BOLD}║    hinsdale-cli --json <hex>         # JSON output       ║${RESET}"
+echo -e "${BOLD}║    hinsdale-cli --disasm-only <hex>  # disasm fast       ║${RESET}"
+echo -e "${BOLD}║    hinsdale-cli --sigs-only <hex>    # function sigs     ║${RESET}"
+echo -e "${BOLD}║    hinsdale-cli --security-only <hex># audit only        ║${RESET}"
+echo -e "${BOLD}║    hinsdale-cli --summary <hex>      # one liner         ║${RESET}"
+echo -e "${BOLD}║    cat contract.bin | hinsdale-cli   # stdin binary      ║${RESET}"
+echo -e "${BOLD}║                                                          ║${RESET}"
+echo -e "${BOLD}║  INTERACTIVE REPL (recommended):                         ║${RESET}"
+echo -e "${BOLD}║    hinsdale-repl                  # start shell          ║${RESET}"
+echo -e "${BOLD}║    hinsdale-repl <hex>             # analyze then shell   ║${RESET}"
+echo -e "${BOLD}║    hinsdale-repl --file x.bin      # load file           ║${RESET}"
+echo -e "${BOLD}║    hinsdale-repl --no-repl <hex>   # one-shot            ║${RESET}"
+echo -e "${BOLD}║    hinsdale-repl --batch *.bin     # batch files         ║${RESET}"
+echo -e "${BOLD}║                                                          ║${RESET}"
+echo -e "${BOLD}║  REPL commands:                                          ║${RESET}"
+echo -e "${BOLD}║    <hex>    analyze bytecode   last    re-show report    ║${RESET}"
+echo -e "${BOLD}║    disasm   full disassembly   source  pseudo-Solidity   ║${RESET}"
+echo -e "${BOLD}║    security audit findings     sigs    function sigs     ║${RESET}"
+echo -e "${BOLD}║    save     save to file       history session log       ║${RESET}"
+echo -e "${BOLD}║    quit     exit               help    show commands      ║${RESET}"
+echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${RESET}"
+echo
+
+# Also add smoke test for Cython if available
+if python3 -c "import _hinsdale; print('[SMOKE] Cython OK:', _hinsdale.version())" 2>/dev/null; then
+  log "Cython extension smoke test PASSED"
+else
+  warn "Cython extension not importable — subprocess mode active"
+fi
