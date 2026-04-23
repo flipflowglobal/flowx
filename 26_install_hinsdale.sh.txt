@@ -137,7 +137,7 @@ cd "$SCRIPT_DIR"
 
 if python3 -c "import Cython, numpy" 2>/dev/null; then
   # Build shared lib variant for Cython linking
-  cargo build --release --lib 2>&1 | tail -3
+  cargo build --manifest-path "$SCRIPT_DIR/hinsdale/Cargo.toml" --release --lib 2>&1 | tail -3
   python3 setup_cython.py build_ext --inplace 2>&1 | tail -10
   CYTHON_SO=$(ls _hinsdale*.so 2>/dev/null | head -1)
   if [ -n "$CYTHON_SO" ]; then
@@ -146,7 +146,7 @@ if python3 -c "import Cython, numpy" 2>/dev/null; then
       SITE_PKG=$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null || echo "")
       if [ -n "$SITE_PKG" ]; then
         cp "$CYTHON_SO" "$SITE_PKG/"
-        cp target/release/libhinsdale.so "$SITE_PKG/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/hinsdale/target/release/libhinsdale.so" "$SITE_PKG/" 2>/dev/null || true
         log "Installed Cython extension to $SITE_PKG"
       fi
     fi

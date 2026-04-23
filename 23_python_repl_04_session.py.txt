@@ -9,9 +9,38 @@ from datetime import datetime
 from typing import Optional
 import json as _json
 
-from repl_01_core import C, _W, _backend_name, risk_colour, risk_label, section
-from repl_02_analysis import AnalysisResult, _do_analysis
-from repl_03_renderer import render_report
+try:
+    from .repl_01_core import C, _W, _backend_name, risk_colour, risk_label, section, progress_bar
+    from .repl_02_analysis import AnalysisResult, _do_analysis
+    from .repl_03_renderer import render_report
+except ImportError:
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    _BASE = Path(__file__).resolve().parent
+
+    def _load_local(name: str, filename: str):
+        loader = SourceFileLoader(name, str(_BASE / filename))
+        spec = importlib.util.spec_from_loader(name, loader)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(mod)
+        return mod
+
+    _core = _load_local("repl_01_core", "20_python_repl_01_core.py.txt")
+    _analysis = _load_local("repl_02_analysis", "21_python_repl_02_analysis.py.txt")
+    _renderer = _load_local("repl_03_renderer", "22_python_repl_03_renderer.py.txt")
+
+    C = _core.C
+    _W = _core._W
+    _backend_name = _core._backend_name
+    risk_colour = _core.risk_colour
+    risk_label = _core.risk_label
+    section = _core.section
+    progress_bar = _core.progress_bar
+    AnalysisResult = _analysis.AnalysisResult
+    _do_analysis = _analysis._do_analysis
+    render_report = _renderer.render_report
 
 # ── Session ────────────────────────────────────────────────────────────────
 
@@ -63,7 +92,6 @@ def run_analysis_live(bytecode_input, session: Session) -> Optional[AnalysisResu
 
     def on_phase(name, frac):
         current_phase[0] = name
-        from repl_01_core import progress_bar
         bar = progress_bar(name, frac)
         if _TTY:
             sys.stdout.write(f"{C.ERASE}{bar}")

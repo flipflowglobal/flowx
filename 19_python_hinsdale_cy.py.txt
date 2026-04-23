@@ -54,7 +54,6 @@ except ImportError:
 # ── Fallback: subprocess wrapper from hinsdale.py ─────────────────────────
 
 _HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE / "python"))
 try:
     from hinsdale import Hinsdale as _SubprocHinsdale, HinsdaleReport as _SubprocReport
     _SUBPROCESS = True

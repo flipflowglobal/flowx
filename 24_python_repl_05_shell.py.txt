@@ -7,10 +7,42 @@ import os, re, sys, textwrap
 from pathlib import Path
 from typing import Optional
 
-from repl_01_core import C, _W, _backend_name, section, risk_colour, risk_label
-from repl_02_analysis import AnalysisResult
-from repl_03_renderer import render_report
-from repl_04_session import Session, run_analysis_live, save_report
+try:
+    from .repl_01_core import C, _W, _backend_name, section, risk_colour, risk_label, cat_col
+    from .repl_02_analysis import AnalysisResult
+    from .repl_03_renderer import render_report
+    from .repl_04_session import Session, run_analysis_live, save_report
+except ImportError:
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    _BASE = Path(__file__).resolve().parent
+
+    def _load_local(name: str, filename: str):
+        loader = SourceFileLoader(name, str(_BASE / filename))
+        spec = importlib.util.spec_from_loader(name, loader)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(mod)
+        return mod
+
+    _core = _load_local("repl_01_core", "20_python_repl_01_core.py.txt")
+    _analysis = _load_local("repl_02_analysis", "21_python_repl_02_analysis.py.txt")
+    _renderer = _load_local("repl_03_renderer", "22_python_repl_03_renderer.py.txt")
+    _session = _load_local("repl_04_session", "23_python_repl_04_session.py.txt")
+
+    C = _core.C
+    _W = _core._W
+    _backend_name = _core._backend_name
+    section = _core.section
+    risk_colour = _core.risk_colour
+    risk_label = _core.risk_label
+    cat_col = _core.cat_col
+    AnalysisResult = _analysis.AnalysisResult
+    render_report = _renderer.render_report
+    Session = _session.Session
+    run_analysis_live = _session.run_analysis_live
+    save_report = _session.save_report
 
 try:
     import readline  # arrow keys + history
@@ -108,7 +140,6 @@ def _cmd_disasm(session: Session):
     if not r:
         print(f"\n  {C.DIM}No analysis loaded.{C.RESET}\n")
         return
-    from repl_01_core import cat_col
     print(section("FULL DISASSEMBLY", C.TEAL))
     print()
     for ins in r.instructions:

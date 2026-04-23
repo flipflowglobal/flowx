@@ -10,7 +10,8 @@ Termux / aarch64:
     ANDROID_API_LEVEL=24 python setup_cython.py build_ext --inplace
 
 Rust lib must be compiled first (or set build=True to auto-compile):
-    cargo build --release   → target/release/libhinsdale.so
+    cargo build --manifest-path hinsdale/Cargo.toml --release --lib
+    → hinsdale/target/release/libhinsdale.so
 """
 
 import os, sys, subprocess
@@ -27,8 +28,9 @@ except ImportError:
     sys.exit(1)
 
 HERE       = Path(__file__).parent.resolve()
+RUST_DIR   = HERE / "hinsdale"
 CY_DIR     = HERE / "cython"
-TARGET_DIR = HERE / "target" / "release"
+TARGET_DIR = RUST_DIR / "target" / "release"
 
 IS_ANDROID = "ANDROID_API_LEVEL" in os.environ or Path("/data/data/com.termux").exists()
 IS_MACOS   = sys.platform == "darwin"
@@ -44,7 +46,11 @@ def ensure_rust():
     if IS_ANDROID:
         env.setdefault("ANDROID_API_LEVEL", "24")
         env.setdefault("CC", "clang")
-    r = subprocess.run(["cargo", "build", "--release", "--lib"], cwd=HERE, env=env)
+    r = subprocess.run(
+        ["cargo", "build", "--manifest-path", str(RUST_DIR / "Cargo.toml"), "--release", "--lib"],
+        cwd=RUST_DIR,
+        env=env,
+    )
     if r.returncode != 0:
         print("[ERROR] cargo build failed")
         sys.exit(1)

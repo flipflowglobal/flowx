@@ -15,13 +15,44 @@ try:
     )
     from .repl_02_analysis import AnalysisResult
 except ImportError:
-    from repl_01_core import (
-        C, _W, _backend_name,
-        progress_bar, section, badge,
-        risk_colour, risk_label, severity_colour,
-        hex_dump, cat_col,
-    )
-    from repl_02_analysis import AnalysisResult
+    try:
+        from repl_01_core import (
+            C, _W, _backend_name,
+            progress_bar, section, badge,
+            risk_colour, risk_label, severity_colour,
+            hex_dump, cat_col,
+        )
+        from repl_02_analysis import AnalysisResult
+    except ImportError:
+        import importlib.util
+        from importlib.machinery import SourceFileLoader
+        from pathlib import Path
+
+        _BASE = Path(__file__).resolve().parent
+
+        def _load_local(name: str, filename: str):
+            loader = SourceFileLoader(name, str(_BASE / filename))
+            spec = importlib.util.spec_from_loader(name, loader)
+            mod = importlib.util.module_from_spec(spec)
+            assert spec and spec.loader
+            spec.loader.exec_module(mod)
+            return mod
+
+        _core = _load_local("repl_01_core", "20_python_repl_01_core.py.txt")
+        _analysis = _load_local("repl_02_analysis", "21_python_repl_02_analysis.py.txt")
+
+        C = _core.C
+        _W = _core._W
+        _backend_name = _core._backend_name
+        progress_bar = _core.progress_bar
+        section = _core.section
+        badge = _core.badge
+        risk_colour = _core.risk_colour
+        risk_label = _core.risk_label
+        severity_colour = _core.severity_colour
+        hex_dump = _core.hex_dump
+        cat_col = _core.cat_col
+        AnalysisResult = _analysis.AnalysisResult
 
 def render_report(r: AnalysisResult) -> str:
     """Render a full human-readable colour report. Returns string."""

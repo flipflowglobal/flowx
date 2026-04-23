@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-tests/benchmark.py — Speed comparison: Cython vs subprocess vs pure Python
+29_tests_benchmark.py.txt — Speed comparison: Cython vs subprocess vs pure Python
 
-Run from hinsdale/ root:
-    python tests/benchmark.py
-    python tests/benchmark.py --n 100
+Run from repository root:
+    python 29_tests_benchmark.py.txt
+    python 29_tests_benchmark.py.txt --n 100
 """
 import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
+REPO_ROOT = os.path.abspath(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 AUREON_HEX = (
     "608060405234801561000f575f80fd5b506004361061006f575f3560e01c8063839006f21161004d"
