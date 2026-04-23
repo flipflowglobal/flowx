@@ -86,7 +86,7 @@ ext = Extension(
 
 setup(
     name            = "hinsdale",
-    version         = "1.0.0",
+    version         = "2.0.0",
     description     = "Hinsdale EVM Decompiler — Cython/Rust extension",
     ext_modules     = cythonize(
         [ext],
