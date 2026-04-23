@@ -8,8 +8,6 @@ pub mod types;
 pub mod symbolic;
 pub mod decompiler;
 pub mod ffi;
-pub mod defi;
-pub mod mev;
 
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -22,8 +20,6 @@ pub struct HinsdaleReport {
     pub cfg_summary: CfgSummary,
     pub signatures:  signatures::SignatureReport,
     pub security:    security::SecurityReport,
-    pub defi:        defi::DefiReport,
-    pub mev:         mev::MevReport,
     pub decompiled:  decompiler::DecompiledOutput,
     pub elapsed_ms:  f64,
 }
@@ -64,8 +60,6 @@ pub fn analyze(bytecode: &[u8]) -> HinsdaleReport {
     };
     let signatures = signatures::recover_signatures(&disassembly);
     let security   = security::analyze_security(&disassembly);
-    let defi       = defi::analyze_defi(&disassembly, &signatures);
-    let mev        = mev::analyze_mev(&disassembly, &signatures);
     let decompiled = decompiler::decompile(&disassembly, &cfg, &signatures);
 
     let is_runtime = bytecode.len() >= 3
@@ -103,8 +97,6 @@ pub fn analyze(bytecode: &[u8]) -> HinsdaleReport {
         cfg_summary,
         signatures,
         security,
-        defi,
-        mev,
         decompiled,
         elapsed_ms: t0.elapsed().as_secs_f64() * 1000.0,
     }

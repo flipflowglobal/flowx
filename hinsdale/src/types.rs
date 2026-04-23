@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use rustc_hash::FxHashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EvmType {
     Address,
     Uint(u16),

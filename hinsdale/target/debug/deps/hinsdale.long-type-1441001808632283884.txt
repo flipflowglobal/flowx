@@ -1,0 +1,1 @@
+rayon::iter::Map<rayon::slice::Iter<'_, BytecodeSlice>, {closure@src/ffi.rs:315:14: 315:17}>
