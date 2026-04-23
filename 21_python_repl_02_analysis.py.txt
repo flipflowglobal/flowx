@@ -7,12 +7,32 @@ import re, sys, time
 from typing import Optional
 from datetime import datetime
 
-# Re-import shared state from core
-from repl_01_core import (
-    C, _W, _BACKEND, _backend_name,
-    risk_colour, risk_label,
-)
+# Re-import shared state from core when available; otherwise provide
+# local fallbacks so importing this analysis driver does not fail.
+try:
+    from repl_01_core import (
+        C, _W, _BACKEND, _backend_name,
+        risk_colour, risk_label,
+    )
+except ImportError:
+    C = ""
+    _W = 80
+    _BACKEND = None
+    _backend_name = "unavailable"
 
+    def risk_label(score):
+        if score >= 80:
+            return "critical"
+        if score >= 60:
+            return "high"
+        if score >= 40:
+            return "medium"
+        if score >= 20:
+            return "low"
+        return "info"
+
+    def risk_colour(score):
+        return risk_label(score)
 try:
     import _hinsdale as _cy
 except ImportError:
