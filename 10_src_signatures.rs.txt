@@ -160,8 +160,9 @@ pub fn recover_signatures(disasm: &Disassembly) -> SignatureReport {
                 .any(|x| (0xa0..=0xa4).contains(&x.opcode));
             if nearby_log {
                 if let Some(ref hex) = ins.imm {
-                    if !event_topics.contains(hex) {
-                        event_topics.push(format!("0x{}", hex));
+                    let topic = format!("0x{}", hex);
+                    if !event_topics.contains(&topic) {
+                        event_topics.push(topic);
                     }
                 }
             }
