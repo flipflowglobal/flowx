@@ -6,12 +6,15 @@ Run from hinsdale/ root:
     python tests/test_aureon.py
     python tests/test_aureon.py --full
 """
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
-
-from hinsdale import Hinsdale
-
+try:
+    from hinsdale import Hinsdale
+except ImportError as exc:
+    raise ImportError(
+        "Unable to import 'hinsdale' using normal package imports. "
+        "Place this test in the project's test suite (for example, "
+        "'tests/test_aureon.py') and run it with the package installed "
+        "or otherwise available on the standard Python import path."
+    ) from exc
 # ── Real Aureon FlashLoanArbitrage runtime bytecode from compiler.py ──────
 AUREON_HEX = (
     "608060405234801561000f575f80fd5b506004361061006f575f3560e01c8063839006f21161004d578063839006f2146100f5"
