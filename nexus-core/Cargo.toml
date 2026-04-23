@@ -4,33 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Ethereum / Blockchain
-alloy = { version = "0.1.4", features = ["full", "sol-types"] }
-
-# Async / Concurrency
+alloy = { version = "1.1.0", features = ["full", "rpc-types-eth", "providers", "signers", "signer-local", "transport-http"] }
+alloy-sol-types = "1.1.0"
+alloy-contract = "1.1.0"
 tokio = { version = "1.0", features = ["full"] }
-rayon = "1.8"
-futures = "0.3"
-
-# Math / Algorithms
-ndarray = "0.15"
-nalgebra = "0.32"
-rand = "0.8"
-rand_distr = "0.4"
-rand_xoshiro = "0.6"
-hex-literal = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
-
-# Serialization / Logging
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-log = "0.4"
-env_logger = "0.10"
-
-# Performance
-hashbrown = "0.14"
-smallvec = "1.11"
-
-[lib]
-name = "nexus_core"
-crate-type = ["cdylib", "rlib"]
+eyre = "0.6"
